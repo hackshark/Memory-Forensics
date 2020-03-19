@@ -1,0 +1,237 @@
+Volatility工具使用：
+
+
+常用的命令如下：
+
+命令	功能
+cmdline/cmdscan	列出历史cmd命令
+filescan	扫描文件，可配合grep使用
+netscan	扫描建立的连接和套接字，类似于netstat
+pslist/psscan	列出进程列表
+svcscan	扫描windows服务列表
+screenshot	显示GDI样式的截屏
+memdump	从内存dump进程的内存
+dumpfiles	从内存dump文件
+
+
+
+---------------------------------------------
+
+----------------------------------------------
+
+
+以文件men.vmen为例子
+
+1、 先使用 imageinfo 插件猜测出dump文件的profile 配置文件值 【imageinfo】
+
+volatility -f 文件名 imageinfo 
+
+eg：volatility -f mem.vmem imageinfo
+
+得到：
+Suggested Profile(s) : WinXPSP2x86, WinXPSP3x86 (Instantiated with WinXPSP2x86)
+
+确定dump文件的值为：  WinXPSP2x86
+意思为 WinXP SP2 x86 系统的内存文件 
+------------------------
+
+2、列举进程：【pslist】
+
+volatility -f mem.vmem –profile=WinXPSP2x86 pslist
+
+得到类似win下的进程列表
+
+----------------------------
+
+3、 查看缓存在内存中的注册表信息：
+
+命令：【hivelist】
+
+volatility -f 文件名 --profile=系统类型值 hivelist
+
+eg：
+
+volatility -f mem.vmem --profile=WinXPSP2x86 hivelist
+
+结果部分如下：
+
+Virtual    Physical   Name
+0xe1cee5d0 0x0be075d0 \Device\HarddiskVolume1\Documents and Settings\Administrator\NTUSER.DAT
+0xe16aab60 0x082a6b60 \Device\HarddiskVolume1\WINDOWS\system32\config\SAM
+----------------------------
+
+4、打印出注册表中的数据：（需指定Virtual 地址值） 【hivedump -o 地址值】
+
+命令：
+
+volatility -f 文件名 --profile=系统类型值 hivedump -o 虚地址值
+
+eg:
+
+volatility -f mem.vmem --profile=WinXPSP2x86 hivedump -o 0xe16aab60
+
+
+结果部分如下：
+
+Last Written         Key
+2016-05-03 03:41:48 UTC+0000 \SAM
+2016-05-03 03:41:48 UTC+0000 \SAM\SAM
+2016-05-03 03:41:48 UTC+0000 \SAM\SAM\Domains
+2016-05-03 03:51:02 UTC+0000 \SAM\SAM\Domains\Account
+2016-05-03 03:50:51 UTC+0000 \SAM\SAM\Domains\Account\Aliases
+
+2016-05-03 03:51:02 UTC+0000 \SAM\SAM\Domains\Account\Users\Names
+2016-05-03 03:41:48 UTC+0000 \SAM\SAM\Domains\Account\Users\Names\Administrator
+2016-05-03 03:41:48 UTC+0000 \SAM\SAM\Domains\Account\Users\Names\Guest
+------------------------------------------
+
+5、 获取注册表中SAM表中的用户   【printkey -K "注册表键值"】
+
+只要键值就好，注册表名可以不用
+
+命令：
+
+volatility -f 文件名 --profile=系统类型值 printkey -K "SAM\Domains\Account\Users\Names"
+
+eg：
+
+volatility -f mem.vmem --profile=WinXPSP2x86 printkey -K "SAM\Domains\Account\Users\Names"
+
+结果部分如下：
+
+Subkeys:
+  (S) Administrator
+  (S) Guest
+  (S) HelpAssistant
+  (S) SUPPORT_388945a0
+
+-----------------------------
+
+6、获取最后登录的系统的用户(其实也就是查注册表的键值) 【printkey -K "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon】
+
+
+命令:
+
+volatility -f 文件名 --profile=系统类型值 printkey -K "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+
+eg:
+
+volatility -f mem.vmem --profile=WinXPSP2x86 printkey -K "SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+
+----------------------------
+
+7、将某进程数据dump出来（先查看进程，找目标PID，dump该PID的进程）
+
+命令：
+
+volatility -f 文件名 --profile=系统类型值 memdump -p PID值 -D 保存dmp的路径
+
+==
+A。先列举进程：
+
+volatility -f mem.vmem –profile=WinXPSP2x86 pslist
+
+结果：
+Offset(V)  Name                    PID   PPID
+0x81f9d3e8 TrueCrypt.exe          2012   1464      2      139      0      0 2016-05-03 04:33:36 UTC+0000
+
+B。dump 进程PID：
+
+volatility -f mem.vmem –profile=WinXPSP2x86 memdump -p 696 -D ./
+
+成功后会在所在目录生成以 PID为名的dmp文件，可以使用strings进行分析
+
+---------------------------
+
+8、提取内存中 cmd 命令使用情况  【cmdscan】
+
+命令：
+
+volatility -f 文件名 --profile=系统类型值 cmdscan
+
+eg：
+volatility -f mem.vmem --profile=WinXPSP2x86 cmdscan
+
+------------------------------
+
+9、查看当时网络连接情况  【netscan】
+
+命令：
+
+volatility -f 文件名 --profile=系统类型值 netscan
+
+eg:
+volatility -f mem.vmem --profile=WinXPSP2x86 netscan
+
+--------------------------------
+
+10、获取 IE 浏览器的使用情况  【iehistory】
+
+命令：
+
+volatility -f 文件名 --profile=系统类型值 iehistory
+
+eg:
+
+volatility -f mem.vmem --profile=WinXPSP2x86 iehistory
+
+
+---------------------------------
+
+11、获取内存中的系统密码  【hashdump】    -----(两种方法)
+
+
+法一：
+
+命令：
+
+volatility -f 文件名 --profile=系统类型值 hashdump
+
+eg:
+
+volatility -f mem.vmem --profile=WinXPSP2x86 hashdump
+
+
+法二：（dump注册表）
+
+volatility -f 文件名 --profile=系统类型值 hashdump -y （注册表 system 的 virtual 地址 ）-s （SAM 的 virtual 地址）
+
+eg：步骤如下
+
+A、先获取注册表信息：
+
+volatility -f mem.vmem profile=WinXPSP2x86 hivelist
+结果：
+
+Virtual    Physical   Name
+0xe16aab60 0x082a6b60 \Device\HarddiskVolume1\WINDOWS\system32\config\SAM
+0xe1035b60 0x02b08b60 \Device\HarddiskVolume1\WINDOWS\system32\config\system
+
+找到 注册表 system 的 virtual 地址 和 SAM 的 virtual 地址
+分别是0xe1035b60  0xe16aab60
+
+B、进行hashdump
+
+volatility -f mem.vmem profile=WinXPSP2x86 hashdump -y 0xe1035b60 -s 0xe16aab60
+
+
+----------------------------------
+
+12、    timeliner
+最大程度上将内存中的信息提取出来，可以使用 timeliner 这个插件。它会从多个位置来收集系统的活动信息
+
+volatility -f mem.vmem –profile=WinXPSP2x86 timeliner
+
+--------------------------------------
+
+13、查找镜像中的文件  【filescan】  【grep -E '文件类型|文件类型'】
+
+
+命令：
+volatility -f 文件名 --profile=系统类型值 filescan | grep -E 'jpg|png|jpeg|bmp|gif'
+
+eg：
+volatility -f easy_dump.img --profile=Win7SP1x64 filescan | grep  -E 'jpg|png|jpeg|bmp|gif'
+
+---------------------------------
+
